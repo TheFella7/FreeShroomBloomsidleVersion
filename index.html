@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🍄Shrooms Bloom Idle🍄</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;font-family:'Trebuchet MS',sans-serif;background:radial-gradient(circle at top,#3a005f,#000);color:#fff;text-align:center;}
+#topBar{padding:10px;position:sticky;top:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);z-index:10;}
+#title{font-size:1.2em;font-family:'Trebuchet MS',sans-serif;color:#ff00ff;text-shadow:0 0 5px #ff00ff,0 0 10px #ff00ff,0 0 20px #00ffff,0 0 40px #00ffff,0 0 80px #ff00ff;}
+button{background:linear-gradient(45deg,#ff00ff,#00ffff);border:none;border-radius:14px;padding:10px 16px;color:#000;font-weight:bold;cursor:pointer;margin:6px;transition: background 0.1s;}
+button:disabled{opacity:0.4;cursor:not-allowed;}
+#mushroomClicker{font-size:90px;cursor:pointer;position:relative;display:inline-block;transition: transform 0.1s;}
+#mushroomClicker:active {transform: scale(0.95);}
+
+.spores{position:absolute;color:black;font-size:14px;animation:fall 1.2s linear forwards;}
+@keyframes fall{from{top:40px;opacity:1;}to{top:120px;opacity:0;}}
+.bar{width:90%;height:18px;background:#222;border-radius:10px;margin:10px auto;overflow:hidden;}
+.barFill{height:100%;background:linear-gradient(90deg,#ff00ff,#00ffff);width:0%;}
+.card{background:rgba(255,255,255,0.08);border-radius:16px;padding:10px;margin:10px auto;max-width:420px;}
+.glow{animation:glow 2s infinite alternate;}
+@keyframes glow{from{box-shadow:0 0 10px #ff00ff;}to{box-shadow:0 0 25px #00ffff;}}
+.upgradeCount{font-size:0.9em;color:#fff;margin-top:4px;}
+#sporeRate{font-size:1em;margin:8px;font-weight:bold;}
+#mushroomBoost{font-size:0.9em;color:#00ffff;display:block;margin-bottom:5px;}
+#notification-popup{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(45deg,#00ffff,#ff00ff);color:#000;padding:15px 25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.5);font-weight:bold;font-size:1.1em;opacity:0;transition:opacity 0.5s, transform 0.5s;z-index:100;pointer-events:none;white-space:pre-wrap;text-align:center;}
+.maxDisplay{font-size:0.8em;color:#ff69b4;margin-left:5px;}
+#dateTimeDisplay {
+    margin: 10px auto;
+    font-size: 1.1em;
+    color: #00ffff;
+    text-shadow: 0 0 5px #00ffff;
+}
+</style>
+</head>
+<body>
+<div id="topBar">
+<button onclick="saveGame()">💾 Save Game</button>
+<button onclick="hardReset()">HARD RESET</button>
+<div id="title" class="glow">🍄Shrooms Bloom Idle🍄</div>
+<small id="lastSaved" style="display:block;margin-top:5px;">Never Saved</small>
+</div>
+
+<div id="notification-popup"></div>
+
+<div id="game">
+<div id="dateTimeDisplay"></div>
+<div id="mushroomClicker" onclick="clickMushroom()">🍄</div>
+<h3>Spores: <span id="spores">0</span></h3>
+<div id="sporeRate">Spores/sec: <span id="rate">0</span></div>
+<h3>Mushrooms: <span id="mushrooms">0</span></h3>
+<div id="mushroomBoost"></div>
+<h3>Ascensions: <span id="ascensions">0</span></h3>
+<div id="permanentBoost"></div> 
+<h3>Level <span id="level">1</span></h3>
+<div class="bar"><div id="expFill" class="barFill"></div></div>
+
+<button id="buyMushroomBtn" onclick="buyMushroom()">Buy Mushroom</button>
+<button id="ascendBtn" onclick="ascend()" disabled class="glow">Ascend</button>
+
+<div class="card">
+<div>Spore Grower (+1/sec)</div>
+<button id="growerBtn" onclick="buyUpgrade('grower')">Buy</button><span id="growerMax" class="maxDisplay"></span>
+<div class="upgradeCount">Purchased: <span id="growerCount">0</span></div>
+</div>
+<div class="card">
+<div>Mycelium Farm (+5/sec)</div>
+<button id="farmBtn" onclick="buyUpgrade('farm')">Buy</button><span id="farmMax" class="maxDisplay"></span>
+<div class="upgradeCount">Purchased: <span id="farmCount">0</span></div>
+</div>
+<div class="card">
+<div>Psychedelic Forest (+25/sec)</div>
+<button id="forestBtn" onclick="buyUpgrade('forest')">Buy</button><span id="forestMax" class="maxDisplay"></span>
+<div class="upgradeCount">Purchased: <span id="forestCount">0</span></div>
+</div>
+<div class="card">
+<div>Auto Clicker (+1 click/sec)</div>
+<button id="autoclickerBtn" onclick="buyUpgrade('autoclicker')">Buy</button><span id="autoclickerMax" class="maxDisplay"></span>
+<div class="upgradeCount">Purchased: <span id="autoclickerCount">0</span></div>
+</div>
+</div>
+
+<script>
+// --- GAME VARIABLES ---
+let spores=0, mushrooms=0, ascensions=0;
+let level=1, exp=0, expNeeded=1000;
+let upgrades={grower:{count:0,cost:10,rate:1},farm:{count:0,cost:100,rate:5},forest:{count:0,cost:1000,rate:25},autoclicker:{count:0,cost:5000,rate:1}};
+const SAVE_KEY = "shroomsBloomIdleSave";
+const BASE_UPGRADE_COSTS = {grower:10,farm:100,forest:1000,autoclicker:5000};
+
+// --- MUSHROOM & ASCENSION ---
+const MUSHROOM_BASE_COST = 100000;
+const MUSHROOM_COST_MULTIPLIER = 1.01;
+const BASE_ASCENSION_COST = 100;
+function getMushroomCost(){return Math.floor(MUSHROOM_BASE_COST*Math.pow(MUSHROOM_COST_MULTIPLIER,mushrooms));}
+function getAscensionCost(){return Math.floor(BASE_ASCENSION_COST*Math.pow(1.01,ascensions));}
+
+// --- FORMATTERS ---
+function formatNumber(num){if(num<1000)return Math.floor(num).toLocaleString();if(num<1000000)return (num/1000).toFixed(2)+"k";let exponent=Math.floor(Math.log10(num));let tier=Math.floor(exponent/3);let suffixIndex=tier-2;const alphabet="abcdefghijklmnopqrstuvwxyz";let suffix="";let tempIndex=suffixIndex;while(tempIndex>=0){suffix=alphabet[tempIndex%26]+suffix;tempIndex=Math.floor(tempIndex/26)-1;}return (num/Math.pow(10,tier*3)).toFixed(2)+suffix;}
+function formatTime(totalSeconds){totalSeconds=Math.max(0,totalSeconds);const minutes=Math.floor(totalSeconds/60);const seconds=Math.floor(totalSeconds%60);return `${minutes}:${seconds.toString().padStart(2,'0')}`;}
+function showNotification(msg){const popup=document.getElementById('notification-popup');popup.textContent=msg;popup.style.opacity='1';popup.style.transform='translate(-50%,0)';setTimeout(()=>{popup.style.opacity='0';popup.style.transform='translate(-50%,-20px)';},4000);}
+function ascensionBonus(){return 1+ascensions*0.01;}
+function getMultiplier(){ return ascensionBonus(); }
+
+// --- DATE/TIME FUNCTION ---
+function updateDateTime() {
+    const now = new Date();
+    const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    
+    const dateStr = now.toLocaleDateString(undefined, dateOptions);
+    const timeStr = now.toLocaleTimeString(undefined, timeOptions);
+    
+    document.getElementById('dateTimeDisplay').textContent = `${dateStr} | ${timeStr}`;
+}
+
+
+// --- MUSHROOM CLICK (Simplified) ---
+function clickMushroom(){
+    // Total calculation uses the permanent ascension multiplier
+    let total = getMultiplier(); 
+    
+    spores += total;
+    gainExp(total);
+    spreadSpores(3,total);
+}
+
+// --- SPORES ANIMATION & EXP ---
+function spreadSpores(a,gain){const mc=document.getElementById('mushroomClicker');for(let i=0;i<a;i++){const s=document.createElement('div');s.className='spores';s.textContent='●';let offsetX=(Math.random()*120-60)+'px';let offsetY=(Math.random()*60-30)+'px';s.style.left='calc(50% + '+offsetX+')';s.style.top=offsetY;mc.appendChild(s);setTimeout(()=>s.remove(),1400);}}
+function gainExp(amount){exp+=amount; while(exp>=expNeeded){exp-=expNeeded; level++; expNeeded=Math.floor(expNeeded*1.6);} document.getElementById('expFill').style.width=(Math.min(100,exp/expNeeded*100))+'%';}
+
+// --- UPGRADES ---
+function calculateMaxPurchasable(type){const u=upgrades[type];const base=BASE_UPGRADE_COSTS[type];const mult=1.5;const current=u.count;return Math.max(0,Math.floor(Math.log(1+(spores*(mult-1))/(base*Math.pow(mult,current)))/Math.log(mult)));}
+function calculateTotalCost(type,qty){const u=upgrades[type];const base=BASE_UPGRADE_COSTS[type];const mult=1.5;const current=u.count;if(qty===0)return 0;return Math.ceil(base*Math.pow(mult,current)*(Math.pow(mult,qty)-1)/(mult-1));}
+function buyUpgrade(type){const maxQty=calculateMaxPurchasable(type);if(maxQty===0)return;const totalCost=calculateTotalCost(type,maxQty);spores-=totalCost;upgrades[type].count+=maxQty;upgrades[type].cost=Math.floor(BASE_UPGRADE_COSTS[type]*Math.pow(1.5,upgrades[type].count));showNotification(`Bought ${maxQty} ${type} upgrades!`);update();}
+function calculateMaxMushrooms(){return Math.max(0,Math.floor(Math.log(1+(spores*(MUSHROOM_COST_MULTIPLIER-1))/(MUSHROOM_BASE_COST*Math.pow(MUSHROOM_COST_MULTIPLIER,mushrooms)))/Math.log(MUSHROOM_COST_MULTIPLIER)));}
+function buyMushroom(){const maxBuy=calculateMaxMushrooms();if(maxBuy===0) return; let totalCost=0; for(let i=0;i<maxBuy;i++){totalCost+=Math.floor(MUSHROOM_BASE_COST*Math.pow(MUSHROOM_COST_MULTIPLIER,mushrooms+i));} spores-=totalCost; mushrooms+=maxBuy; showNotification(`🍄 Purchased ${maxBuy} Mushrooms! Total: ${mushrooms}`); update();}
+function calculateMaxAscensions(){return Math.max(0,Math.floor(Math.log(1+(mushrooms*(1.01-1))/(BASE_ASCENSION_COST*Math.pow(1.01,ascensions)))/Math.log(1.01)));}
+function ascend(){const maxAsc=calculateMaxAscensions();if(maxAsc===0)return;let totalCost=0;for(let i=0;i<maxAsc;i++){totalCost+=Math.floor(BASE_ASCENSION_COST*Math.pow(1.01,ascensions+i));} mushrooms-=totalCost; ascensions+=maxAsc; spores=0; for(const k in upgrades){upgrades[k].count=0; upgrades[k].cost=BASE_UPGRADE_COSTS[k];} showNotification(`🌟 Ascended ${maxAsc} times! Total Ascensions: ${ascensions}`); update();}
+
+// --- SAVE / LOAD (Cleaned up) ---
+function saveGame(){const data={spores,mushrooms,ascensions,level,exp,expNeeded,upgrades,lastOnline:Date.now()};localStorage.setItem(SAVE_KEY,JSON.stringify(data));document.getElementById('lastSaved').textContent='Saved at '+new Date().toLocaleTimeString();}
+function loadGame(){try{const saved=localStorage.getItem(SAVE_KEY);if(saved){const d=JSON.parse(saved);spores=d.spores||0;mushrooms=d.mushrooms||0;ascensions=d.ascensions||0;level=d.level||1;exp=d.exp||0;expNeeded=d.expNeeded||1000;
+    
+    for(const k in upgrades){if(d.upgrades&&d.upgrades[k]){upgrades[k].count=d.upgrades[k].count||0; upgrades[k].cost=d.upgrades[k].cost||BASE_UPGRADE_COSTS[k];}}} }catch(e){console.error(e);} update(); }
+function hardReset(){if(confirm("🛑 This will wipe all progress! Proceed?")){spores=0;mushrooms=0;ascensions=0;level=1;exp=0;expNeeded=1000;
+    
+    for(const k in upgrades){upgrades[k].count=0;upgrades[k].cost=BASE_UPGRADE_COSTS[k];}localStorage.removeItem(SAVE_KEY);showNotification("💀 Game Wiped!");update();}}
+
+// --- UPDATE LOOP (Updated permanentBoost display) ---
+function update(){
+    const interval=0.1;
+
+    // Passive & auto income
+    let basePassiveRate=0, baseAutoRate=0;
+    for(let u in upgrades){if(u!=='autoclicker'){basePassiveRate+=upgrades[u].count*upgrades[u].rate;}else{baseAutoRate+=upgrades[u].count*upgrades[u].rate;}}
+    
+    let totalMultiplier=ascensionBonus(); 
+    
+    let passiveGain=basePassiveRate*totalMultiplier*interval;
+    let clickGain=baseAutoRate*totalMultiplier*interval;
+    spores+=passiveGain+clickGain;
+    gainExp(passiveGain+clickGain);
+
+    // Update UI
+    document.getElementById('spores').textContent=formatNumber(spores);
+    
+    // Recalculate rate for display
+    let effectiveRate = (basePassiveRate + baseAutoRate) * ascensionBonus();
+    
+    document.getElementById('rate').textContent=formatNumber(effectiveRate);
+
+    document.getElementById('mushrooms').textContent=formatNumber(mushrooms);
+    document.getElementById('ascensions').textContent=ascensions;
+    document.getElementById('level').textContent=level;
+    
+    document.getElementById('permanentBoost').textContent=`Permanent Boost: x${ascensionBonus().toFixed(2)}`; 
+    document.getElementById('mushroomBoost').textContent=`Ascension Bonus: +${(ascensions*1).toFixed(0)}%`;
+
+    // Buttons
+    const buyMushBtn=document.getElementById('buyMushroomBtn');
+    const maxMush=calculateMaxMushrooms();
+    buyMushBtn.disabled=maxMush===0;
+    buyMushBtn.textContent=`Buy Mushroom (${formatNumber(getMushroomCost())} Spores, Max: ${maxMush})`;
+
+    const ascendBtn=document.getElementById('ascendBtn');
+    const maxAsc=calculateMaxAscensions();
+    ascendBtn.disabled=maxAsc===0;
+    ascendBtn.textContent=`Ascend (${formatNumber(getAscensionCost())} 🍄, Max: ${maxAsc})`;
+
+    for(let k in upgrades){
+        const btn=document.getElementById(k+'Btn');const maxDisplay=document.getElementById(k+'Max');const maxQty=calculateMaxPurchasable(k);
+        if(btn){btn.disabled=maxQty===0;btn.textContent=`Buy (${formatNumber(upgrades[k].cost)})`;}
+        if(maxDisplay){maxDisplay.textContent=maxQty>0?`Max: ${maxQty}`:'';}
+        const countDisplay=document.getElementById(k+'Count');if(countDisplay){countDisplay.textContent=upgrades[k].count.toLocaleString();}
+    }
+}
+
+// Initialize the date/time display immediately and then update every second
+updateDateTime(); 
+setInterval(updateDateTime, 1000); 
+
+setInterval(update,100);
+loadGame();
+
+// --- AUTO SAVE EVERY 30 SECONDS ---
+setInterval(saveGame,30000);
+</script>
+</body>
+</html>
